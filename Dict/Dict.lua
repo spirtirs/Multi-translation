@@ -1,8 +1,9 @@
 --[[
     RuEnTranslator - Dict\Dict.lua  (FASE 3: motor de diccionarios)
 
-    Guarda los diccionarios por idioma de origen:
-        ns.Dict.data[lang] = { words = {}, stems = {}, count = N }
+    Guarda diccionarios por ruta de traducción:
+        ns.Dict.data[source] = ...       -- rutas antiguas a español
+        ns.Dict.data[source_target] = ... -- rutas con destino explícito
 
       words : clave normalizada (palabra o frase de hasta 4 palabras) -> traducción
       stems : raíces (para ruso, que tiene muchas declinaciones) -> traducción
@@ -28,9 +29,19 @@ local Dict = {
     data = {
         ru = { words = {}, stems = {}, count = 0 },
         en = { words = {}, stems = {}, count = 0 },
+        en_zh = { words = {}, stems = {}, count = 0 },
+        zh_en = { words = {}, stems = {}, count = 0 },
     },
 }
 ns.Dict = Dict
+
+function Dict:GetData(sourceLang, targetLang)
+    if not sourceLang or not targetLang then return nil end
+    local route = self.data[sourceLang .. "_" .. targetLang]
+    if route then return route end
+    if targetLang == "es" then return self.data[sourceLang] end
+    return nil
+end
 
 ------------------------------------------------------------------------
 -- Normalización (string.lower no entiende UTF-8, así que el cirílico se
@@ -78,6 +89,7 @@ function Dict:Add(lang, src, dst)
     local tbl = isStem and d.stems or d.words
     if tbl[key] == nil then d.count = d.count + 1 end
     tbl[key] = dst or ""
+    d.keysByFirstByte = nil
 
     InvalidateCache()
     return true
@@ -97,8 +109,18 @@ function Dict:Remove(lang, src)
 
     tbl[key] = nil
     d.count = d.count - 1
+    d.keysByFirstByte = nil
     InvalidateCache()
     return true
+end
+
+function Dict:LoadGlossaries()
+    for source, target in pairs(WoWTranslateOutGlossary or {}) do
+        self:Add("en_zh", source, target)
+    end
+    for source, target in pairs(WoWTranslateGlossary or {}) do
+        self:Add("zh_en", source, target)
+    end
 end
 
 -- Carga un bloque de texto con líneas "origen = traducción".

@@ -1,7 +1,7 @@
 --[[
     RuEnTranslator - Translator.lua  (FASE 3: traducción offline)
 
-    ns.Translator:Translate(texto, idiomaOrigen) -> string | nil
+    ns.Translator:Translate(texto, idiomaOrigen, idiomaDestino) -> string | nil
       nil = "no sé traducirlo": el chat queda intacto.
 
     Algoritmo (palabra a palabra con frases, sin gramática):
@@ -194,13 +194,75 @@ end
 -- Traducción
 ------------------------------------------------------------------------
 -- Ejecuta el algoritmo. Devuelve texto|nil, aciertos, fallos.
-function Translator:Run(text, lang, collect)
-    local d = ns.Dict.data[lang]
+function Translator:Run(text, lang, collect, targetLang)
+    if type(collect) == "string" and targetLang == nil then
+        targetLang, collect = collect, nil
+    end
+    targetLang = targetLang or ns:GetTargetLanguage()
+    local d = ns.Dict:GetData(lang, targetLang)
     if not d or type(text) ~= "string" or text == "" then return nil, 0, 0 end
 
     local saved = {}
     text = text:gsub("\226\128\153", "'")
     text = Protect(text, saved)
+
+    if lang == "zh" then
+        local normalized = text:lower()
+        local keysByFirstByte = d.keysByFirstByte
+        if not keysByFirstByte then
+            keysByFirstByte = {}
+            for key, value in pairs(d.words) do
+                local firstByte = key:byte(1)
+                local keys = keysByFirstByte[firstByte]
+                if not keys then keys = {}; keysByFirstByte[firstByte] = keys end
+                keys[#keys + 1] = { key, value }
+            end
+            for _, keys in pairs(keysByFirstByte) do
+                table.sort(keys, function(a, b) return #a[1] > #b[1] end)
+            end
+            d.keysByFirstByte = keysByFirstByte
+        end
+
+        local out, hit, miss, pos = {}, 0, 0, 1
+        local missed = collect and {} or nil
+        while pos <= #text do
+            local keys = keysByFirstByte[normalized:byte(pos)]
+            local matched, translated
+            if keys then
+                for _, entry in ipairs(keys) do
+                    if normalized:sub(pos, pos + #entry[1] - 1) == entry[1] then
+                        matched, translated = entry[1], entry[2]
+                        break
+                    end
+                end
+            end
+            if matched then
+                out[#out + 1] = translated
+                hit = hit + CharLen(matched)
+                pos = pos + #matched
+            else
+                local b = text:byte(pos)
+                local charLen = b and b >= 240 and 4 or (b and b >= 224 and 3 or (b and b >= 192 and 2 or 1))
+                local char = text:sub(pos, pos + charLen - 1)
+                out[#out + 1] = char
+                if b and b >= 228 and b <= 233 then
+                    miss = miss + 1
+                    if missed then missed[#missed + 1] = char end
+                end
+                pos = pos + charLen
+            end
+        end
+
+        if hit == 0 then return nil, hit, miss, missed end
+        local result = table.concat(out)
+        local idx = 0
+        result = result:gsub("\1", function()
+            idx = idx + 1
+            return saved[idx]
+        end)
+        if result == "" then return nil, hit, miss, missed end
+        return result, hit, miss, missed
+    end
 
     local parts = Tokenize(text)
     local nparts = #parts
@@ -294,7 +356,7 @@ function Translator:RecordUnknown(lang, words)
     end
 end
 
--- Con /ret learn on también se guardan los últimos mensajes ru/en (formato "ru|texto")
+-- Con /ret learn on también se guardan los últimos mensajes (formato "ru|texto")
 -- en SavedVariables, para poder analizarlos sin copiar nada del chat.
 local SAMPLE_LIMIT = 300
 
@@ -308,7 +370,7 @@ function Translator:RecordSample(lang, text)
 end
 
 function Translator:ClearUnknown()
-    ns.db.unknown = { ru = {}, en = {} }
+    ns.db.unknown = { ru = {}, en = {}, zh = {} }
     ns.db.samples = {}
     unknownCounts = {}
 end
@@ -317,7 +379,7 @@ end
 -- Proveedores externos (opcional, futuro)
 -- WoW 5.4.8 no puede hacer peticiones HTTP, pero otro addon o un módulo propio
 -- puede registrar una función que traduzca de otra forma:
---     ns:RegisterProvider("miProveedor", function(texto, idioma) return "..." or nil end)
+--     ns:RegisterProvider("miProveedor", function(texto, origen, destino) return "..." or nil end)
 -- Solo se consulta cuando el diccionario no alcanza la cobertura mínima.
 ------------------------------------------------------------------------
 local providers = {}
@@ -326,26 +388,27 @@ function ns:RegisterProvider(name, fn)
     if type(fn) == "function" then providers[#providers + 1] = { name = name, fn = fn } end
 end
 
-local function TryProviders(text, lang)
+local function TryProviders(text, lang, targetLang)
     for _, p in ipairs(providers) do
-        local ok, r = pcall(p.fn, text, lang)
+        local ok, r = pcall(p.fn, text, lang, targetLang)
         if ok and type(r) == "string" and r ~= "" then return r end
     end
     return nil
 end
 
-function Translator:Translate(text, lang)
+function Translator:Translate(text, lang, targetLang)
     if type(text) ~= "string" or text == "" then return nil end
 
-    local key = lang .. ":" .. text
+    targetLang = targetLang or ns:GetTargetLanguage()
+    local key = lang .. ":" .. tostring(targetLang) .. ":" .. text
     local c = cache[key]
     if c ~= nil then return c or nil end
 
-    local result, hit, miss, missed = self:Run(text, lang, ns.db and ns.db.learn)
+    local result, hit, miss, missed = self:Run(text, lang, ns.db and ns.db.learn, targetLang)
     if missed and #missed > 0 then self:RecordUnknown(lang, missed) end
     if ns.db.learn then self:RecordSample(lang, text) end
     if result and hit / (hit + miss) < MinCoverage() then result = nil end
-    if not result and #providers > 0 then result = TryProviders(text, lang) end
+    if not result and #providers > 0 then result = TryProviders(text, lang, targetLang) end
 
     if cacheSize >= CACHE_LIMIT then self:ClearCache() end
     cache[key] = result or false
@@ -359,7 +422,14 @@ end
 local commands = ns.commands
 
 local function ValidLang(lang)
-    return lang == "ru" or lang == "en"
+    return lang == "ru" or lang == "en" or lang == "zh"
+end
+
+local function UserDictRoute(lang)
+    local targetLang = ns:GetTargetLanguage()
+    if not ns.Dict:GetData(lang, targetLang) then return nil end
+    if targetLang == "es" then return lang end
+    return lang .. "_" .. targetLang
 end
 
 -- /ret translate <texto>  -> prueba el traductor sin necesitar a otros jugadores
@@ -369,11 +439,13 @@ function commands.translate(args)
     if not lang then ns:Print(L["TR_UNKNOWN"]); return end
     if lang == "es" then ns:Print(L["TR_ALREADY_ES"]); return end
 
-    local result, hit, miss = Translator:Run(args, lang)
+    local targetLang = ns:GetTargetLanguage()
+    if not targetLang then ns:Print(L["TARGET_UNSUPPORTED"]); return end
+    local result, hit, miss = Translator:Run(args, lang, targetLang)
     if not result then ns:Print(L["TR_NONE"]:format(lang)); return end
 
     local cov = hit / (hit + miss)
-    ns:Print(("[%s>ES] %s"):format(lang:upper(), result))
+    ns:Print(("[%s>%s] %s"):format(lang:upper(), targetLang:upper(), result))
     ns:Print(L["TR_COVERAGE"]:format(math.floor(cov * 100 + 0.5), hit, hit + miss,
         cov >= MinCoverage() and L["TR_SHOWN"] or L["TR_HIDDEN"]))
 end
@@ -395,10 +467,12 @@ function commands.add(args)
     local lang, rest = args:match("^(%S+)%s+(.+)$")
     lang = lang and lang:lower()
     local src, dst = rest and rest:match("^(.-)%s*=%s*(.+)$")
-    if not ValidLang(lang) or not src or src == "" then ns:Print(L["ADD_USAGE"]); return end
+    local route = ValidLang(lang) and UserDictRoute(lang)
+    if not route or not src or src == "" then ns:Print(L["ADD_USAGE"]); return end
 
-    ns.db.userDict[lang][src] = dst
-    ns.Dict:Add(lang, src, dst)
+    if not ns.db.userDict[route] then ns.db.userDict[route] = {} end
+    ns.db.userDict[route][src] = dst
+    ns.Dict:Add(route, src, dst)
     ns:Print(L["ADD_OK"]:format(lang, src, dst))
 end
 
@@ -406,11 +480,13 @@ end
 function commands.del(args)
     local lang, src = args:match("^(%S+)%s+(.+)$")
     lang = lang and lang:lower()
-    if not ValidLang(lang) or not src then ns:Print(L["DEL_USAGE"]); return end
+    local route = ValidLang(lang) and UserDictRoute(lang)
+    if not route or not src then ns:Print(L["DEL_USAGE"]); return end
 
-    local inUser = ns.db.userDict[lang][src] ~= nil
-    ns.db.userDict[lang][src] = nil
-    local inMemory = ns.Dict:Remove(lang, src)
+    local userDict = ns.db.userDict[route] or {}
+    local inUser = userDict[src] ~= nil
+    userDict[src] = nil
+    local inMemory = ns.Dict:Remove(route, src)
     if inUser or inMemory then
         ns:Print(L["DEL_OK"]:format(lang, src))
     else
@@ -422,13 +498,15 @@ end
 function commands.list(args)
     local lang = args:match("^(%S+)")
     lang = lang and lang:lower()
-    local langs = ValidLang(lang) and { lang } or { "ru", "en" }
+    local langs = ValidLang(lang) and { lang } or { "ru", "en", "zh" }
 
     local shown = 0
-    for _, lg in ipairs(langs) do
-        for src, dst in pairs(ns.db.userDict[lg]) do
+    for _, sourceLang in ipairs(langs) do
+        local route = UserDictRoute(sourceLang)
+        local entries = route and ns.db.userDict[route]
+        for src, dst in pairs(entries or {}) do
             shown = shown + 1
-            if shown <= 25 then ns:Print(("  [%s] %s = %s"):format(lg, src, dst)) end
+            if shown <= 25 then ns:Print(("  [%s] %s = %s"):format(sourceLang, src, dst)) end
         end
     end
     if shown == 0 then ns:Print(L["LIST_EMPTY"])
@@ -439,6 +517,8 @@ function commands.stats()
     local D = ns.Dict.data
     ns:Print(L["STATS_DICT"]:format("ru", D.ru.count))
     ns:Print(L["STATS_DICT"]:format("en", D.en.count))
+    ns:Print(L["STATS_DICT"]:format("EN>ZH", D.en_zh.count))
+    ns:Print(L["STATS_DICT"]:format("ZH>EN", D.zh_en.count))
     ns:Print(L["STATS_CACHE"]:format(Translator:CacheSize(), CACHE_LIMIT))
 end
 
@@ -466,7 +546,7 @@ function commands.unknown(args)
     end
 
     local lang = first and first:lower()
-    local langs = ValidLang(lang) and { lang } or { "ru", "en" }
+    local langs = ValidLang(lang) and { lang } or { "ru", "en", "zh" }
     local n = tonumber(args:match("(%d+)%s*$")) or 15
 
     local shown = 0

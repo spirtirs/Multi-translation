@@ -26,14 +26,27 @@ ns.version = "1.0.0"
 ------------------------------------------------------------------------
 -- Claves de canal -> usadas en la fase 2 para mapear eventos CHAT_MSG_*.
 ns.CHANNEL_ORDER = { "say", "yell", "party", "raid", "guild", "officer", "whisper", "instance", "world" }
-ns.LANG_ORDER    = { "ru", "en" }
+ns.LANG_ORDER    = { "ru", "en", "zh" }
+
+local TARGET_BY_LOCALE = {
+    enGB = "en",
+    enUS = "en",
+    esES = "es",
+    esMX = "es",
+    zhCN = "zh",
+    zhTW = "zh",
+}
+
+function ns:GetTargetLanguage()
+    return TARGET_BY_LOCALE[GetLocale()]
+end
 
 ns.defaults = {
     enabled = true,
-    targetLang = "es",             -- idioma destino (fijo por ahora)
     languages = {                  -- idiomas de ORIGEN que se traducen
         ru = true,
         en = true,
+        zh = true,
     },
     channels = {                   -- canales prioritarios activados por defecto
         say      = true,
@@ -49,10 +62,10 @@ ns.defaults = {
     showOriginal = true,           -- mostrar el mensaje original junto a la traducción
     minimap = { hide = false, angle = 215 },   -- botón del minimapa
     learn = false,                    -- registrar palabras desconocidas (/ret learn)
-    unknown = { ru = {}, en = {} },    -- palabras desconocidas y su frecuencia
-    samples = {},                      -- últimos mensajes ru/en vistos con learn activo
+    unknown = { ru = {}, en = {}, zh = {} }, -- palabras desconocidas y su frecuencia
+    samples = {},                      -- últimos mensajes vistos con learn activo
     minCoverage = 0.5,                -- % mínimo de palabras reconocidas para mostrar traducción
-    userDict = { ru = {}, en = {} },   -- entradas añadidas con /ret add
+    userDict = { ru = {}, en = {}, en_zh = {}, zh_en = {} }, -- entradas añadidas con /ret add
     layout = "below",            -- "below" (traducción debajo) | "inline" (misma línea)
     debug = false,                 -- modo prueba / errores visibles
     color = { r = 0.40, g = 0.80, b = 1.00 },  -- color de la traducción (Fase 4)
@@ -147,6 +160,7 @@ function ns:ShouldTranslate(channelKey, langKey)
     if not db or not db.enabled then return false end
     if channelKey and not db.channels[channelKey] then return false end
     if langKey and not db.languages[langKey] then return false end
+    if langKey and not ns.Dict:GetData(langKey, ns:GetTargetLanguage()) then return false end
     return true
 end
 
@@ -167,7 +181,10 @@ end
 
 function handlers.PLAYER_LOGIN()
     ns:Print("v" .. ns.version .. " " .. L["ADDON_LOADED"])
-    ns:SafeCall("Dict",    function() ns.Dict:LoadUser() end)      -- entradas del usuario
+    ns:SafeCall("Dict",    function()
+        ns.Dict:LoadGlossaries()
+        ns.Dict:LoadUser()
+    end)
     ns:SafeCall("Chat",    function() ns:RegisterChatEvents() end) -- Chat.lua
     ns:SafeCall("Options", function() ns:BuildOptions() end)       -- Options.lua
     ns:SafeCall("Fuente",  function() ns:ApplyFontSize() end)
@@ -219,6 +236,7 @@ local function PrintStatus()
         langs[#langs + 1] = L["LANG_" .. k] .. "=" .. YesNo(db.languages[k])
     end
     ns:Print("  " .. L["STATUS_LANGS"] .. ": " .. table.concat(langs, ", "))
+    ns:Print("  " .. L["STATUS_TARGET"] .. ": " .. (L["TARGET_" .. tostring(ns:GetTargetLanguage())] or L["TARGET_UNSUPPORTED"]))
 
     local chans = {}
     for _, k in ipairs(ns.CHANNEL_ORDER) do

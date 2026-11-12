@@ -1,8 +1,10 @@
 # RuEn Translator
 
 Traductor de chat **offline** para World of Warcraft **5.4.8 (Mists of Pandaria)**.
-Traduce **ruso → español** e **inglés → español** usando diccionarios locales, sin
-conexión a internet ni dependencias.
+Traduce **ruso/inglés → español** y **inglés ↔ chino** con diccionarios locales, sin
+conexión a internet ni dependencias. El destino se selecciona según el idioma del cliente:
+español (esES/esMX), inglés (enUS/enGB) o chino (zhCN/zhTW).
+El glosario chino adjunto está en chino simplificado, también para clientes zhTW.
 
 ## Instalación
 
@@ -38,7 +40,7 @@ Menú > Interfaz > AddOns > RuEn Translator).
 | `/ret minimap <on\|off>` | Muestra/oculta el botón del minimapa (clic izq.: ventana, clic der.: activar/desactivar, arrastrar: mover) |
 | `/ret on` · `off` · `toggle` | Activa/desactiva la traducción |
 | `/ret status` | Muestra la configuración |
-| `/ret lang <ru\|en> <on\|off>` | Idiomas de origen |
+| `/ret lang <ru\|en\|zh> <on\|off>` | Idiomas de origen |
 | `/ret channel <canal> <on\|off>` | Canales: say, yell, party, raid, guild, officer, whisper, instance, world |
 | `/ret original <on\|off>` | Mostrar/ocultar el mensaje original |
 | `/ret layout <below\|inline>` | Traducción debajo o en la misma línea |
@@ -47,18 +49,20 @@ Menú > Interfaz > AddOns > RuEn Translator).
 | `/ret coverage <0-100>` | % mínimo de palabras reconocidas para mostrar una traducción |
 | `/ret translate <texto>` | Prueba el traductor y muestra la cobertura |
 | `/ret detect <texto>` | Prueba la detección de idioma |
-| `/ret add <ru\|en> <origen> = <traducción>` | Añade una entrada al diccionario |
-| `/ret del <ru\|en> <origen>` | Elimina una entrada propia |
-| `/ret list [ru\|en]` | Lista tus entradas propias |
+| `/ret add <ru\|en\|zh> <origen> = <traducción>` | Añade una entrada para el idioma de destino actual |
+| `/ret del <ru\|en\|zh> <origen>` | Elimina una entrada propia |
+| `/ret list [ru\|en\|zh]` | Lista tus entradas propias |
 | `/ret learn <on\|off>` | Registra las palabras que el diccionario no conoce |
-| `/ret unknown [ru\|en] [n]` · `clear` | Muestra las desconocidas más frecuentes |
+| `/ret unknown [ru\|en\|zh] [n]` · `clear` | Muestra las desconocidas más frecuentes |
 | `/ret stats` · `clearcache` | Estadísticas / vaciar caché |
 | `/ret debug <on\|off>` | Muestra errores internos en el chat |
 | `/ret reset` | Restablece ajustes (conserva tu diccionario propio) |
 
 ## Cómo funciona (y sus límites)
 
-La traducción es **palabra por palabra con frases**, sin gramática. Funciona muy bien con
+La traducción es **palabra por palabra con frases**, sin gramática. Los glosarios
+adjuntos añaden vocabulario de WoW para inglés↔chino; no proporcionan traducción general
+de conversación. Otros idiomas de cliente aún no tienen rutas de diccionario. Funciona muy bien con
 jerga de WoW (LFM, tanque, sanador, banda, botín...) y de forma aceptable con frases
 cortas; la conversación libre en ruso solo se traduce en parte. Para no mostrar resultados
 confusos, si se reconoce menos del 50 % de las palabras no se muestra nada
@@ -90,7 +94,7 @@ El cliente 5.4.8 no puede hacer peticiones HTTP, por lo que no hay traducción o
 integrada. Existe un gancho para quien quiera enchufar otra fuente:
 
 ```lua
-ns:RegisterProvider("miProveedor", function(texto, idioma)  -- idioma: "ru" | "en"
+ns:RegisterProvider("miProveedor", function(texto, origen, destino)
     return "texto traducido" -- o nil si no sabe
 end)
 ```
@@ -103,5 +107,6 @@ Solo se consulta cuando el diccionario no alcanza la cobertura mínima.
 RuEnTranslator.toc   Core.lua      Detect.lua    Chat.lua
 Translator.lua       Options.lua   Locales\esES.lua
 Dict\Dict.lua  Dict\ru.lua  Dict\en.lua  Dict\Custom.lua
+Dict\WoWTranslate_OutGlossary.lua  Dict\WoWTranslate_Glossary.lua
 ```
 # Multi-translation

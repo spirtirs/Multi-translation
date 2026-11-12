@@ -223,7 +223,7 @@ end
 local function RefreshStats()
     if not statsFS or not ns.Dict then return end
     local D = ns.Dict.data
-    statsFS:SetText(L["UI_STATS"]:format(D.ru.count, D.en.count,
+    statsFS:SetText(L["UI_STATS"]:format(D.ru.count, D.en.count, D.en_zh.count, D.zh_en.count,
         ns.Translator and ns.Translator:CacheSize() or 0))
 end
 

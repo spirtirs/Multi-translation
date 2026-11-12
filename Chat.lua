@@ -75,14 +75,15 @@ end
 -- Devuelve nil si no hay nada que cambiar.
 function ns:BuildMessage(channelKey, msg)
     local lang = ns.Detect:Guess(msg)
-    if not lang or lang == "es" then return nil end           -- ya es español / desconocido
+    local targetLang = ns:GetTargetLanguage()
+    if not lang or not targetLang or lang == targetLang then return nil end
     if not ns:ShouldTranslate(channelKey, lang) then return nil end
 
-    local translated = ns.Translator:Translate(msg, lang)
+    local translated = ns.Translator:Translate(msg, lang, targetLang)
     if not translated or translated == "" then return nil end
 
     local db = ns.db
-    local line = ColorHex() .. "[" .. lang:upper() .. ">ES] " .. translated .. "|r"
+    local line = ColorHex() .. "[" .. lang:upper() .. ">" .. targetLang:upper() .. "] " .. translated .. "|r"
 
     if not db.showOriginal then
         return line                                  -- solo la traducción

@@ -1,7 +1,7 @@
 --[[
     RuEnTranslator - Detect.lua  (FASE 2: detección de idioma)
 
-    ns.Detect:Guess(texto) -> "ru" | "en" | "es" | nil
+    ns.Detect:Guess(texto) -> "ru" | "en" | "es" | "zh" | nil
 
     Método (rápido, sin librerías):
       1. Limpia el texto: colores, enlaces de objetos/hechizos, iconos {rt1}, URLs.
@@ -88,10 +88,14 @@ function Detect:Guess(text)
     text = Clean(text)
     local cyr   = Count(text, "[\208-\210][\128-\191]")
     local latin = Count(text, "[A-Za-z]")
+    local han   = Count(text, "[\228-\233][\128-\191][\128-\191]")
 
     -- Ruso
     if cyr > 0 and cyr >= latin * CYR_RATIO then
         return "ru", cyr, latin
+    end
+    if han > 0 and han >= latin * CYR_RATIO then
+        return "zh", cyr, latin
     end
 
     -- Sin letras suficientes (solo números, símbolos, "k", "x"...)
