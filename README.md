@@ -101,6 +101,30 @@ end)
 
 Solo se consulta cuando el diccionario no alcanza la cobertura mínima.
 
+## Ventana externa de traducción (DeepL)
+
+El addon no puede comunicarse directamente con programas externos. Como alternativa sin
+modificar ni inyectar código en WoW, `Bridge\wow_chat_overlay.py` observa el archivo de
+registro de chat del cliente y muestra las traducciones en una ventana separada. No
+escribe traducciones dentro del juego. Las líneas nuevas se envían a DeepL, así que su
+contenido sale del equipo.
+
+1. Instala Python 3.10 o posterior (con Tkinter) y obtén una clave de DeepL API.
+2. Dentro del juego, escribe `/chatlog` para activar el registro. El archivo suele estar
+   en `World of Warcraft\Logs\WoWChatLog.txt`.
+3. En PowerShell, configura la clave solo para la sesión actual e inicia la ventana:
+
+   ```powershell
+   $env:DEEPL_AUTH_KEY = "tu-clave-de-DeepL"
+   python .\Bridge\wow_chat_overlay.py --log "C:\ruta\de\WoW\Logs\WoWChatLog.txt"
+   ```
+
+4. Elige el idioma de destino en la ventana. Al iniciar, el programa comienza al final del
+   registro y traduce solo los mensajes nuevos. Cierra la ventana para detenerlo.
+
+La clave no se guarda en el repositorio ni en un archivo de configuración. Las claves
+DeepL Free (terminadas en `:fx`) usan el endpoint gratuito; las demás usan el endpoint Pro.
+
 ## Estructura
 
 ```
@@ -108,5 +132,6 @@ RuEnTranslator.toc   Core.lua      Detect.lua    Chat.lua
 Translator.lua       Options.lua   Locales\esES.lua
 Dict\Dict.lua  Dict\ru.lua  Dict\en.lua  Dict\Custom.lua
 Dict\WoWTranslate_OutGlossary.lua  Dict\WoWTranslate_Glossary.lua
+Bridge\wow_chat_overlay.py
 ```
 # Multi-translation
