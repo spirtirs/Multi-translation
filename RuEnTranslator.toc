@@ -1,0 +1,20 @@
+## Interface: 50400
+## Title: RuEn Translator
+## Title-esES: RuEn Traductor
+## Notes: Offline chat translator (Russian/English -> Spanish) for WoW 5.4.8.
+## Notes-esES: Traductor de chat offline (Ruso/Ingles -> Espanol) para WoW 5.4.8.
+## Author: ISAIAS
+## Version: 1.0.0
+## SavedVariables: RuEnTranslatorDB
+## OptionalDeps:
+
+Locales\esES.lua
+Core.lua
+Detect.lua
+Dict\Dict.lua
+Dict\ru.lua
+Dict\en.lua
+Dict\Custom.lua
+Translator.lua
+Chat.lua
+Options.lua
